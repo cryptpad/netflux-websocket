@@ -1,0 +1,26 @@
+{
+  "name": "netflux-websocket",
+  "authors": [
+    "cjd@cjdns.fr",
+    "yann.flory@xwiki.com"
+  ],
+  "description": "a websocket based implementation of the netflux api",
+  "main": "netflux-client.js",
+  "keywords": [
+    "netflux",
+    "websocket",
+    "transport"
+  ],
+  "license": "AGPLv3.0",
+  "homepage": "https://github.com/xwiki-labs/netflux-websocket",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "es6-promise": "^3.2.2"
+  }
+}
