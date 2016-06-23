@@ -38,8 +38,11 @@ define([
         if (!chan) {
             throw new Error("no such channel " + chanId);
         }
+        var seq = ctx.seq++;
         delete ctx.channels[chanId];
-        ctx.ws.send(JSON.stringify([ctx.seq++, 'LEAVE', chanId, reason]));
+        ctx.ws.send(JSON.stringify([seq, 'LEAVE', chanId, reason]));
+        var emptyFunction = function() {};
+        ctx.requests[seq] = { reject: emptyFunction, resolve: emptyFunction, time: now() };
     };
 
     var makeEventHandlers = function makeEventHandlers(ctx, mappings) {
@@ -137,13 +140,17 @@ define([
                 }
                 req.resolve();
             } else if (msg[1] === 'ERROR') {
-                req.reject({ type: msg[2], message: msg[3] });
+                if (typeof req.reject === "function") {
+                    req.reject({ type: msg[2], message: msg[3] });
+                } else {
+                    console.error(msg);
+                }
             } else {
                 req.reject({ type: 'UNKNOWN', message: JSON.stringify(msg) });
             }
             return;
         }
-        
+
         if (msg[2] === 'IDENT') {
             ctx.uid = msg[3];
 
