@@ -21,6 +21,7 @@
     "tests"
   ],
   "dependencies": {
+    "reconnectingWebsocket": "^1.0.0",
     "es6-promise": "^3.2.2"
   }
 }
