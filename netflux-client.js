@@ -57,7 +57,7 @@ define([
         };
     };
 
-    var mkChannel = function mkChannel(ctx, id) {
+    var mkChannel = function mkChannel(ctx, id, validateKey) {
         var internal = {
             onMessage: [],
             onJoin: [],
@@ -79,7 +79,7 @@ define([
             on: makeEventHandlers(ctx, { message: internal.onMessage, join: internal.onJoin, leave: internal.onLeave })
         };
         ctx.requests[internal.jSeq] = chan;
-        ctx.ws.send(JSON.stringify([internal.jSeq, 'JOIN', id]));
+        ctx.ws.send(JSON.stringify([internal.jSeq, 'JOIN', id, validateKey]));
 
         return new Promise(function (res, rej) {
             chan._.resolve = res;
@@ -96,8 +96,8 @@ define([
             sendto: function sendto(peerId, content) {
                 return networkSendTo(ctx, peerId, content);
             },
-            join: function join(chanId) {
-                return mkChannel(ctx, chanId);
+            join: function join(chanId, validateKey) {
+                return mkChannel(ctx, chanId, validateKey);
             },
             on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect, reconnect: ctx.onReconnect })
         };
