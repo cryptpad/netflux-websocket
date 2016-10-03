@@ -10,6 +10,8 @@ define([
     var PING_CYCLE = 5000;
     var REQUEST_TIMEOUT = 30000;
 
+    var pingInterval = null;
+
     var now = function now() {
         return new Date().getTime();
     };
@@ -156,7 +158,7 @@ define([
         if (msg[2] === 'IDENT') {
             ctx.uid = msg[3];
 
-            setInterval(function () {
+            pingInterval = setInterval(function () {
                 if (now() - ctx.timeOfLastMessage < MAX_LAG_BEFORE_PING) {
                     return;
                 }
@@ -273,6 +275,9 @@ define([
         };
         ctx.ws.onclose = function (evt) {
             ctx.uid = null;
+            if (pingInterval) {
+                window.clearInterval(pingInterval);
+            }
             ctx.onDisconnect.forEach(function (h) {
                 try {
                     h(evt.reason);
