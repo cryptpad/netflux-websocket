@@ -242,7 +242,7 @@ define([
         }
     };
 
-    var connect = function connect(websocketURL) {
+    var connect = function (websocketURL) {
         var ctx = {
             ws: new ReconnectingWebSocket(websocketURL),
             seq: 1,
@@ -253,10 +253,11 @@ define([
             onMessage: [],
             onDisconnect: [],
             onReconnect: [],
-            requests: {}
+            requests: {},
+            interval: null,
         };
         var firstConnection = true;
-        setInterval(function () {
+        ctx.interval = setInterval(function () {
             for (var id in ctx.requests) {
                 var req = ctx.requests[id];
                 if (now() - req.time > REQUEST_TIMEOUT) {
@@ -273,6 +274,7 @@ define([
         };
         ctx.ws.onclose = function (evt) {
             ctx.uid = null;
+            window.clearInterval(ctx.interval);
             ctx.onDisconnect.forEach(function (h) {
                 try {
                     h(evt.reason);
