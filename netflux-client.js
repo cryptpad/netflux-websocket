@@ -259,6 +259,9 @@ define([
         };
         var firstConnection = true;
         setInterval(function () {
+            if (ctx.lag > REQUEST_TIMEOUT) {
+                ctx.ws.refresh();
+            }
             for (var id in ctx.requests) {
                 var req = ctx.requests[id];
                 if (now() - req.time > REQUEST_TIMEOUT) {
@@ -275,6 +278,7 @@ define([
         };
         ctx.ws.onclose = function (evt) {
             ctx.uid = null;
+            ctx.lag = 0;
             if (pingInterval) {
                 window.clearInterval(pingInterval);
             }
@@ -298,9 +302,11 @@ define([
                 });
             };
             ctx.ws.onopen = function () {
-                var count = 0;
+                window.ws = ctx.ws;
+                var onopenTime = now();
                 var interval = 100;
                 var checkIdent = function() {
+                    ctx.lag = now() - onopenTime;
                     if(ctx.uid !== null) {
                         if (firstConnection) {
                             firstConnection = false;
@@ -311,10 +317,14 @@ define([
                         }
                     }
                     else {
-                        if(count * interval > REQUEST_TIMEOUT) {
-                            return reject({ type: 'TIMEOUT', message: 'waited ' + (count * interval) + 'ms' });
+                        if(ctx.lag > REQUEST_TIMEOUT) {
+                            ctx.ws.refresh();
+                            if (firstConnection) {
+                                return reject({ type: 'TIMEOUT', message: 'waited ' + ctx.lag + 'ms' });
+                            }
+                            return;
                         }
-                        setTimeout(checkIdent, 100);
+                        setTimeout(checkIdent, interval);
                     }
                 };
                 checkIdent();
