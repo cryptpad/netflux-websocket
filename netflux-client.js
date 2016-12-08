@@ -129,6 +129,7 @@ define([
             if (msg[1] === 'ACK') {
                 if (req.ping) {
                     // ACK of a PING
+                    ctx.timeOfLastLagUpdate = now();
                     ctx.lag = now() - Number(req.ping);
                     return;
                 }
@@ -160,7 +161,7 @@ define([
             ctx.uid = msg[3];
 
             pingInterval = setInterval(function () {
-                if (now() - ctx.timeOfLastMessage < MAX_LAG_BEFORE_PING) {
+                if (now() - ctx.timeOfLastLagUpdate < MAX_LAG_BEFORE_PING) {
                     return;
                 }
                 var seq = ctx.seq++;
