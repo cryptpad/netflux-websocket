@@ -118,6 +118,7 @@ define([
         } catch (e) {
             console.log(e.stack);return;
         }
+        ctx.timeOfLastMessage = now();
         if (msg[0] !== 0) {
             var req = ctx.requests[msg[0]];
             if (!req) {
