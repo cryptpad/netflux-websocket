@@ -7,6 +7,7 @@ define([
 
     var MAX_LAG_BEFORE_PING = 15000;
     var MAX_LAG_BEFORE_DISCONNECT = 30000;
+    var MAX_ERRORS_BEFORE_ABORT = 5;
     var PING_CYCLE = 5000;
     var REQUEST_TIMEOUT = 30000;
 
@@ -302,6 +303,14 @@ define([
                         console.log(e.stack);
                     }
                 });
+            };
+            var errors = 0;
+            ctx.ws.onerror = function () {
+                if (!ctx.uid && errors >= MAX_ERRORS_BEFORE_ABORT) {
+                    ctx.ws.close();
+                    return reject({ type: 'WEBSOCKET', message: 'Unable to connect to the websocket server.' });
+                }
+                errors++;
             };
             ctx.ws.onopen = function () {
                 window.ws = ctx.ws;
