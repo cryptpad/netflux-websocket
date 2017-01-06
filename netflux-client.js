@@ -307,13 +307,14 @@ define([
             var errors = 0;
             ctx.ws.onerror = function () {
                 if (!ctx.uid && errors >= MAX_ERRORS_BEFORE_ABORT) {
-                    ctx.ws.close();
-                    return reject({ type: 'WEBSOCKET', message: 'Unable to connect to the websocket server.' });
+                    if (firstConnection) {
+                        ctx.ws.close();
+                        return reject({ type: 'WEBSOCKET', message: 'Unable to connect to the websocket server.' });
+                    }
                 }
                 errors++;
             };
             ctx.ws.onopen = function () {
-                window.ws = ctx.ws;
                 var onopenTime = now();
                 var interval = 100;
                 var checkIdent = function() {
