@@ -1,20 +1,52 @@
 /*global: WebSocket */
 define([
-    '/bower_components/reconnectingWebsocket/reconnecting-websocket.js',
     '/bower_components/es6-promise/es6-promise.min.js',
-],function (ReconnectingWebSocket) {
+],function () {
     'use strict';
 
+    // How much lag before we send a ping
     var MAX_LAG_BEFORE_PING = 15000;
+
+    // How much of a lag we accept before we will drop the socket
     var MAX_LAG_BEFORE_DISCONNECT = 30000;
-    var MAX_ERRORS_BEFORE_ABORT = 5;
+
+    // How often to ping the server
     var PING_CYCLE = 5000;
+
+    // How long before we decide we could not make a websocket to the server.
     var REQUEST_TIMEOUT = 30000;
+
+    // If we try to close the websocket but it fails to close,
+    // how long before we discard the socket and start a new one.
+    var FORCE_CLOSE_TIMEOUT = 10000;
+
+    // If we are unable to connect to the server (don't get a connection),
+    // this is how often we will retry to connect.
+    var RECONNECT_LOOP_CYCLE = 7000;
+
+
+    var NOFUNC = function () {};
 
     var pingInterval = null;
 
     var now = function now() {
         return new Date().getTime();
+    };
+
+    var getLag = function (ctx) {
+        if (!ctx.ws) { return null; }
+        if (!ctx.pingOutstanding) { return ctx.lastObservedLag; }
+        return Math.max(now() - ctx.timeOfLastPingSent, ctx.lastObservedLag);
+    };
+
+    var closeWebsocket = function (ctx) {
+        if (!ctx.ws) { return; }
+        ctx.ws.close();
+        setTimeout(function () {
+            // onclose nulls this
+            if (!ctx.ws) { return; }
+            ctx.ws.onclose({ reason: "forced closed because websocket failed to close" });
+        }, FORCE_CLOSE_TIMEOUT);
     };
 
     var networkSendTo = function networkSendTo(ctx, peerId, content) {
@@ -93,8 +125,8 @@ define([
     var mkNetwork = function mkNetwork(ctx) {
         var network = {
             webChannels: ctx.channels,
-            getLag: function getLag() {
-                return ctx.lag;
+            getLag: function _getLag() {
+                return getLag(ctx);
             },
             sendto: function sendto(peerId, content) {
                 return networkSendTo(ctx, peerId, content);
@@ -119,7 +151,6 @@ define([
         } catch (e) {
             console.log(e.stack);return;
         }
-        ctx.timeOfLastMessage = now();
         if (msg[0] !== 0) {
             var req = ctx.requests[msg[0]];
             if (!req) {
@@ -130,8 +161,9 @@ define([
             if (msg[1] === 'ACK') {
                 if (req.ping) {
                     // ACK of a PING
-                    ctx.timeOfLastLagUpdate = now();
-                    ctx.lag = now() - Number(req.ping);
+                    ctx.lastObservedLag = now() - Number(req.ping);
+                    ctx.timeOfLastPingReceived = now();
+                    ctx.pingOutstanding--;
                     return;
                 }
                 req.resolve();
@@ -160,18 +192,19 @@ define([
 
         if (msg[2] === 'IDENT') {
             ctx.uid = msg[3];
-
+            ctx.ws._onident();
             pingInterval = setInterval(function () {
-                if (now() - ctx.timeOfLastLagUpdate < MAX_LAG_BEFORE_PING) {
-                    return;
+                if (now() - ctx.timeOfLastPingReceived < MAX_LAG_BEFORE_PING) { return; }
+                if (now() - ctx.timeOfLastPingReceived > MAX_LAG_BEFORE_DISCONNECT) {
+                    closeWebsocket(ctx);
                 }
+                if (ctx.pingOutstanding) { return; }
                 var seq = ctx.seq++;
                 var currentDate = now();
-                ctx.requests[seq] = { time: now(), ping: currentDate };
+                ctx.timeOfLastPingSent = currentDate;
+                ctx.pingOutstanding++;
+                ctx.requests[seq] = { time: currentDate, ping: currentDate };
                 ctx.ws.send(JSON.stringify([seq, 'PING', currentDate]));
-                if (now() - ctx.timeOfLastMessage > MAX_LAG_BEFORE_DISCONNECT) {
-                    ctx.ws.close();
-                }
             }, PING_CYCLE);
 
             return;
@@ -247,100 +280,76 @@ define([
         }
     };
 
-    var connect = function connect(websocketURL) {
+    var connect = function connect(websocketURL, makeWebsocket) {
+        makeWebsocket = makeWebsocket || function (url) { return new window.WebSocket(url) };
         var ctx = {
-            ws: new ReconnectingWebSocket(websocketURL),
+            ws: null,
             seq: 1,
-            lag: 0,
             uid: null,
             network: null,
             channels: {},
             onMessage: [],
             onDisconnect: [],
             onReconnect: [],
-            requests: {}
+            requests: {},
+
+            timeOfLastPingSent: now(),
+            timeOfLastPingReceived: now(),
+            lastObservedLag: 0,
+            pingOutstanding: 0
         };
-        var firstConnection = true;
-        setInterval(function () {
-            if (ctx.lag > REQUEST_TIMEOUT) {
-                ctx.ws.refresh();
-            }
-            for (var id in ctx.requests) {
-                var req = ctx.requests[id];
-                if (now() - req.time > REQUEST_TIMEOUT) {
-                    delete ctx.requests[id];
-                    if (typeof req.reject === "function") {
-                        req.reject({ type: 'TIMEOUT', message: 'waited ' + (now() - req.time) + 'ms' });
-                    }
-                }
-            }
-        }, 5000);
-        ctx.network = mkNetwork(ctx);
-        ctx.ws.onmessage = function (msg) {
-            return onMessage(ctx, msg);
-        };
-        ctx.ws.onclose = function (evt) {
-            ctx.uid = null;
-            ctx.lag = 0;
-            if (pingInterval) {
-                window.clearInterval(pingInterval);
-            }
-            ctx.onDisconnect.forEach(function (h) {
-                try {
-                    h(evt.reason);
-                } catch (e) {
-                    console.log(e.stack);
-                }
-            });
-        };
-        return new Promise(function (resolve, reject) {
-            var onReconnectHandler = function (uid) {
-                ctx.channels = {};
-                ctx.onReconnect.forEach(function (h) {
-                   try {
-                        h(uid);
+
+        // For the returned promise, after the promise is resolved/rejected these will be NOFUNC'd.
+        var promiseResolve = NOFUNC;
+        var promiseReject = NOFUNC;
+
+        var connectWs = function () {
+            var ws = ctx.ws = makeWebsocket(websocketURL);
+            ws.onmessage = function (msg) { return onMessage(ctx, msg); };
+            ws.onclose = function (evt) {
+                ctx.uid = null;
+                ctx.ws = null;
+                ctx.onDisconnect.forEach(function (h) {
+                    try {
+                        h(evt.reason);
                     } catch (e) {
                         console.log(e.stack);
                     }
                 });
+                setTimeout(connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
             };
-            var errors = 0;
-            ctx.ws.onerror = function () {
-                if (!ctx.uid && errors >= MAX_ERRORS_BEFORE_ABORT) {
-                    if (firstConnection) {
-                        ctx.ws.close();
-                        return reject({ type: 'WEBSOCKET', message: 'Unable to connect to the websocket server.' });
-                    }
+            ws.onopen = function () {
+                setTimeout(function () {
+                    if (ctx.uid) { return; }
+                    promiseReject({ type: 'TIMEOUT', message: 'waited ' + REQUEST_TIMEOUT + 'ms' });
+                    promiseResolve = promiseReject = NOFUNC;
+                    closeWebsocket(ctx);
+                }, REQUEST_TIMEOUT);
+            };
+            ctx.ws._onident = function () {
+                // This is to use the time of IDENT minus the connect time to guess a ping reception
+                ctx.timeOfLastPingReceived = now();
+
+                if (promiseResolve !== NOFUNC) {
+                    promiseResolve(ctx.network);
+                    promiseResolve = promiseReject = NOFUNC;
+                } else {
+                    ctx.channels = {};
+                    ctx.onReconnect.forEach(function (h) {
+                       try {
+                            h(ctx.uid);
+                        } catch (e) {
+                            console.log(e.stack);
+                        }
+                    });
                 }
-                errors++;
-            };
-            ctx.ws.onopen = function () {
-                var onopenTime = now();
-                var interval = 100;
-                var checkIdent = function() {
-                    ctx.lag = now() - onopenTime;
-                    if(ctx.uid !== null) {
-                        if (firstConnection) {
-                            firstConnection = false;
-                            return resolve(ctx.network);
-                        }
-                        else {
-                            onReconnectHandler(ctx.uid);
-                        }
-                    }
-                    else {
-                        if(ctx.lag > REQUEST_TIMEOUT) {
-                            ctx.ws.refresh();
-                            if (firstConnection) {
-                                return reject({ type: 'TIMEOUT', message: 'waited ' + ctx.lag + 'ms' });
-                            }
-                            return;
-                        }
-                        setTimeout(checkIdent, interval);
-                    }
-                };
-                checkIdent();
-            };
+            }
+        };
+
+        return new Promise(function (resolve, reject) {
+            promiseResolve = resolve;
+            promiseReject = reject;
+            connectWs();
         });
     };
 
