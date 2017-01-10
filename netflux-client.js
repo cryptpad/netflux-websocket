@@ -298,6 +298,7 @@ define([
             lastObservedLag: 0,
             pingOutstanding: 0
         };
+        ctx.network = mkNetwork(ctx);
 
         // For the returned promise, after the promise is resolved/rejected these will be NOFUNC'd.
         var promiseResolve = NOFUNC;
