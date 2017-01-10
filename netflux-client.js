@@ -49,9 +49,14 @@ define([
         }, FORCE_CLOSE_TIMEOUT);
     };
 
+    var send = function (ctx, content) {
+        if (!ctx.ws) { throw new Error("Disconnected, you cannot send any message right now"); }
+        ctx.ws.send(JSON.stringify(content));
+    }
+
     var networkSendTo = function networkSendTo(ctx, peerId, content) {
         var seq = ctx.seq++;
-        ctx.ws.send(JSON.stringify([seq, 'MSG', peerId, content]));
+        send(ctx, [seq, 'MSG', peerId, content]);
         return new Promise(function (res, rej) {
             ctx.requests[seq] = { reject: rej, resolve: res, time: now() };
         });
@@ -63,7 +68,7 @@ define([
             throw new Error("no such channel " + chanId);
         }
         var seq = ctx.seq++;
-        ctx.ws.send(JSON.stringify([seq, 'MSG', chanId, content]));
+        send(ctx, [seq, 'MSG', chanId, content]);
         return new Promise(function (res, rej) {
             ctx.requests[seq] = { reject: rej, resolve: res, time: now() };
         });
@@ -77,7 +82,7 @@ define([
         var seq = ctx.seq++;
         delete ctx.channels[chanId];
         if (ctx.ws.readyState !== 1) { return; } // the websocket connection is not opened
-        ctx.ws.send(JSON.stringify([seq, 'LEAVE', chanId, reason]));
+        send(ctx, [seq, 'LEAVE', chanId, reason]);
         var emptyFunction = function() {};
         ctx.requests[seq] = { reject: emptyFunction, resolve: emptyFunction, time: now() };
     };
@@ -114,7 +119,7 @@ define([
             on: makeEventHandlers(ctx, { message: internal.onMessage, join: internal.onJoin, leave: internal.onLeave })
         };
         ctx.requests[internal.jSeq] = chan;
-        ctx.ws.send(JSON.stringify([internal.jSeq, 'JOIN', id]));
+        send(ctx, [internal.jSeq, 'JOIN', id]);
 
         return new Promise(function (res, rej) {
             chan._.resolve = res;
@@ -204,7 +209,7 @@ define([
                 ctx.timeOfLastPingSent = currentDate;
                 ctx.pingOutstanding++;
                 ctx.requests[seq] = { time: currentDate, ping: currentDate };
-                ctx.ws.send(JSON.stringify([seq, 'PING', currentDate]));
+                send(ctx, [seq, 'PING']);
             }, PING_CYCLE);
 
             return;
@@ -214,7 +219,7 @@ define([
         }
         if (msg[2] === 'PING') {
             msg[2] = 'PONG';
-            ctx.ws.send(JSON.stringify(msg));
+            send(ctx, msg);
             return;
         }
 
@@ -308,15 +313,18 @@ define([
             var ws = ctx.ws = makeWebsocket(websocketURL);
             ws.onmessage = function (msg) { return onMessage(ctx, msg); };
             ws.onclose = function (evt) {
-                ctx.uid = null;
+                clearInterval(pingInterval);
                 ctx.ws = null;
-                ctx.onDisconnect.forEach(function (h) {
-                    try {
-                        h(evt.reason);
-                    } catch (e) {
-                        console.log(e.stack);
-                    }
-                });
+                if (ctx.uid) {
+                    ctx.uid = null;
+                    ctx.onDisconnect.forEach(function (h) {
+                        try {
+                            h(evt.reason);
+                        } catch (e) {
+                            console.log(e.stack);
+                        }
+                    });
+                }
                 setTimeout(connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
             };
             ws.onopen = function () {
@@ -330,12 +338,15 @@ define([
             ctx.ws._onident = function () {
                 // This is to use the time of IDENT minus the connect time to guess a ping reception
                 ctx.timeOfLastPingReceived = now();
+                ctx.lastObservedLag = now() - ctx.timeOfLastPingSent;
 
                 if (promiseResolve !== NOFUNC) {
                     promiseResolve(ctx.network);
                     promiseResolve = promiseReject = NOFUNC;
                 } else {
                     ctx.channels = {};
+                    ctx.requests = {};
+                    ctx.pingOutstanding = 0;
                     ctx.onReconnect.forEach(function (h) {
                        try {
                             h(ctx.uid);
