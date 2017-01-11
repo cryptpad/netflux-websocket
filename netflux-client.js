@@ -27,8 +27,6 @@ define([
 
     var NOFUNC = function () {};
 
-    var pingInterval = null;
-
     var now = function now() {
         return new Date().getTime();
     };
@@ -202,7 +200,7 @@ define([
         if (msg[2] === 'IDENT') {
             ctx.uid = msg[3];
             ctx.ws._onident();
-            pingInterval = setInterval(function () {
+            ctx.pingInterval = setInterval(function () {
                 if (now() - ctx.timeOfLastPingReceived < MAX_LAG_BEFORE_PING) { return; }
                 if (now() - ctx.timeOfLastPingReceived > MAX_LAG_BEFORE_DISCONNECT) {
                     closeWebsocket(ctx);
@@ -302,6 +300,7 @@ define([
             onReconnect: [],
             timeouts: [],
             requests: {},
+            pingInterval: null,
 
             timeOfLastPingSent: -1,
             timeOfLastPingReceived: -1,
@@ -319,7 +318,7 @@ define([
             ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
             ws.onmessage = function (msg) { return onMessage(ctx, msg); };
             ws.onclose = function (evt) {
-                clearInterval(pingInterval);
+                clearInterval(ctx.pingInterval);
                 ctx.timeouts.forEach(clearTimeout);
                 ctx.ws = null;
                 if (ctx.uid) {
