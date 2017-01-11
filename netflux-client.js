@@ -39,10 +39,14 @@ define([
         return Math.max(now() - ctx.timeOfLastPingSent, ctx.lastObservedLag);
     };
 
+    var setTimeoutX = function (ctx, func, time) {
+        ctx.timeouts.push(setTimeout(func, time));
+    };
+
     var closeWebsocket = function (ctx) {
         if (!ctx.ws) { return; }
         ctx.ws.close();
-        setTimeout(function () {
+        setTimeoutX(ctx, function () {
             // onclose nulls this
             if (!ctx.ws) { return; }
             ctx.ws.onclose({ reason: "forced closed because websocket failed to close" });
@@ -296,10 +300,11 @@ define([
             onMessage: [],
             onDisconnect: [],
             onReconnect: [],
+            timeouts: [],
             requests: {},
 
-            timeOfLastPingSent: now(),
-            timeOfLastPingReceived: now(),
+            timeOfLastPingSent: -1,
+            timeOfLastPingReceived: -1,
             lastObservedLag: 0,
             pingOutstanding: 0
         };
@@ -311,9 +316,11 @@ define([
 
         var connectWs = function () {
             var ws = ctx.ws = makeWebsocket(websocketURL);
+            ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
             ws.onmessage = function (msg) { return onMessage(ctx, msg); };
             ws.onclose = function (evt) {
                 clearInterval(pingInterval);
+                ctx.timeouts.forEach(clearTimeout);
                 ctx.ws = null;
                 if (ctx.uid) {
                     ctx.uid = null;
@@ -325,10 +332,10 @@ define([
                         }
                     });
                 }
-                setTimeout(connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
+                setTimeoutX(ctx, connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
             };
             ws.onopen = function () {
-                setTimeout(function () {
+                setTimeoutX(ctx, function () {
                     if (ctx.uid) { return; }
                     promiseReject({ type: 'TIMEOUT', message: 'waited ' + REQUEST_TIMEOUT + 'ms' });
                     promiseResolve = promiseReject = NOFUNC;
