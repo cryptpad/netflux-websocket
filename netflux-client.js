@@ -43,6 +43,8 @@ define([
 
     var closeWebsocket = function (ctx) {
         if (!ctx.ws) { return; }
+        ctx.ws.onmessage = NOFUNC;
+        ctx.ws.onopen = NOFUNC;
         ctx.ws.close();
         setTimeoutX(ctx, function () {
             // onclose nulls this
@@ -318,6 +320,7 @@ define([
             ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
             ws.onmessage = function (msg) { return onMessage(ctx, msg); };
             ws.onclose = function (evt) {
+                ws.onclose = NOFUNC;
                 clearInterval(ctx.pingInterval);
                 ctx.timeouts.forEach(clearTimeout);
                 ctx.ws = null;
