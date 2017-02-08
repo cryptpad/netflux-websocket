@@ -131,6 +131,17 @@ define([
         });
     };
 
+    var disconnect = function (ctx) {
+        if (ctx.ws) {
+            var onclose = ctx.ws.onclose;
+            ctx.ws.onclose = NOFUNC;
+            ctx.ws.close();
+            onclose();
+        }
+        ctx.timeouts.forEach(clearTimeout);
+        ctx.timeouts = [];
+    };
+
     var mkNetwork = function mkNetwork(ctx) {
         var network = {
             webChannels: ctx.channels,
@@ -143,6 +154,9 @@ define([
             join: function join(chanId) {
                 return mkChannel(ctx, chanId);
             },
+            disconnect: function () {
+                return disconnect(ctx);
+            }
             on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect, reconnect: ctx.onReconnect })
         };
         network.__defineGetter__("webChannels", function () {
