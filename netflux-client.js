@@ -156,7 +156,7 @@ define([
             },
             disconnect: function () {
                 return disconnect(ctx);
-            }
+            },
             on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect, reconnect: ctx.onReconnect })
         };
         network.__defineGetter__("webChannels", function () {
