@@ -136,7 +136,7 @@ define([
             var onclose = ctx.ws.onclose;
             ctx.ws.onclose = NOFUNC;
             ctx.ws.close();
-            onclose();
+            onclose({ reason: "network.disconnect() called" });
         }
         ctx.timeouts.forEach(clearTimeout);
         ctx.timeouts = [];
