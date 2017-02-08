@@ -136,6 +136,7 @@ define([
             var onclose = ctx.ws.onclose;
             ctx.ws.onclose = NOFUNC;
             ctx.ws.close();
+            // this reason string is matched in other code so don't change it.
             onclose({ reason: "network.disconnect() called" });
         }
         ctx.timeouts.forEach(clearTimeout);
