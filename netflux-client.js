@@ -1,7 +1,8 @@
 /*global: WebSocket */
 define([
+    '/bower_components/socket.io-client/dist/socket.io.slim.js',
     '/bower_components/es6-promise/es6-promise.min.js',
-],function () {
+],function (io) {
     'use strict';
 
     // How much lag before we send a ping
@@ -43,14 +44,7 @@ define([
 
     var closeWebsocket = function (ctx) {
         if (!ctx.ws) { return; }
-        ctx.ws.onmessage = NOFUNC;
-        ctx.ws.onopen = NOFUNC;
         ctx.ws.close();
-        setTimeoutX(ctx, function () {
-            // onclose nulls this
-            if (!ctx.ws) { return; }
-            ctx.ws.onclose({ reason: "forced closed because websocket failed to close" });
-        }, FORCE_CLOSE_TIMEOUT);
     };
 
     var send = function (ctx, content) {
@@ -304,8 +298,23 @@ define([
         }
     };
 
+    var splitUrl = function (url) {
+        var arr = /^((?:wss?:\/\/)?(?:www\.)?(?:[^\/\n]+))(\/?.+)/.exec(url);
+        return {
+            url: arr[0],
+            base: arr[1],
+            path: arr[2]
+        }
+    };
+
     var connect = function connect(websocketURL, makeWebsocket) {
-        makeWebsocket = makeWebsocket || function (url) { return new window.WebSocket(url) };
+        makeWebsocket = makeWebsocket || function (url) {
+            var urlObj = splitUrl(url);
+            return io(urlObj.base, {
+                path: urlObj.path,
+                //transports: ['websocket']
+            });
+        };
         var ctx = {
             ws: null,
             seq: 1,
@@ -333,32 +342,37 @@ define([
         var connectWs = function () {
             var ws = ctx.ws = makeWebsocket(websocketURL);
             ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
-            ws.onmessage = function (msg) { return onMessage(ctx, msg); };
-            ws.onclose = function (evt) {
-                ws.onclose = NOFUNC;
+            ws.on('message', function (msg) { return onMessage(ctx, {data:msg}); });
+            ws.on('disconnect', function (reason) {
+                if (reason === 'io server disconnect') {
+                    // the disconnection was initiated by the server, you need to reconnect manually
+                    ws.connect();
+                }
+                // else the socket will automatically try to reconnect
+
                 clearInterval(ctx.pingInterval);
                 ctx.timeouts.forEach(clearTimeout);
-                ctx.ws = null;
                 if (ctx.uid) {
                     ctx.uid = null;
                     ctx.onDisconnect.forEach(function (h) {
                         try {
-                            h(evt.reason);
+                            h(reason);
                         } catch (e) {
                             console.log(e.stack);
                         }
                     });
                 }
-                setTimeoutX(ctx, connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
-            };
-            ws.onopen = function () {
+                // Try to reconnect...
+                //setTimeoutX(ctx, connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
+            });
+            ws.on('connect', function () {
                 setTimeoutX(ctx, function () {
                     if (ctx.uid) { return; }
                     promiseReject({ type: 'TIMEOUT', message: 'waited ' + REQUEST_TIMEOUT + 'ms' });
                     promiseResolve = promiseReject = NOFUNC;
                     closeWebsocket(ctx);
                 }, REQUEST_TIMEOUT);
-            };
+            });
             ctx.ws._onident = function () {
                 // This is to use the time of IDENT minus the connect time to guess a ping reception
                 ctx.timeOfLastPingReceived = now();
