@@ -85,7 +85,7 @@ define([
         }
         var seq = ctx.seq++;
         delete ctx.channels[chanId];
-        if (ctx.ws.readyState !== 1) { return; } // the websocket connection is not opened
+        if (!ctx.ws || ctx.ws.readyState !== 1) { return; } // the websocket connection is not opened
         send(ctx, [seq, 'LEAVE', chanId, reason]);
         var emptyFunction = function() {};
         ctx.requests[seq] = { reject: emptyFunction, resolve: emptyFunction, time: now() };
