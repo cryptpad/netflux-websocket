@@ -79,7 +79,7 @@ define([
         }
         var seq = ctx.seq++;
         delete ctx.channels[chanId];
-        if (ctx.ws.readyState !== 1) { return; } // the websocket connection is not opened
+        if (!ctx.ws || !ctx.ws.connected) { return; } // the websocket connection is not opened
         send(ctx, [seq, 'LEAVE', chanId, reason]);
         var emptyFunction = function() {};
         ctx.requests[seq] = { reject: emptyFunction, resolve: emptyFunction, time: now() };
@@ -125,13 +125,11 @@ define([
         });
     };
 
+    var isIntentionallyLeaving = false;
     var disconnect = function (ctx) {
         if (ctx.ws) {
-            var onclose = ctx.ws.onclose;
-            ctx.ws.onclose = NOFUNC;
+            isIntentionallyLeaving = true;
             ctx.ws.close();
-            // this reason string is matched in other code so don't change it.
-            onclose({ reason: "network.disconnect() called" });
         }
         ctx.timeouts.forEach(clearTimeout);
         ctx.timeouts = [];
@@ -347,8 +345,12 @@ define([
                 if (reason === 'io server disconnect') {
                     // the disconnection was initiated by the server, you need to reconnect manually
                     ws.connect();
-                }
                 // else the socket will automatically try to reconnect
+                } else if (isIntentionallyLeaving) {
+                    // this reason string is matched in other code so don't change it.
+                    reason = "network.disconnect() called";
+                    isIntentionallyLeaving = false;
+                }
 
                 clearInterval(ctx.pingInterval);
                 ctx.timeouts.forEach(clearTimeout);
