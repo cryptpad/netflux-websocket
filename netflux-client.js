@@ -50,7 +50,7 @@ define([
     var send = function (ctx, content) {
         if (!ctx.ws) { throw new Error("Disconnected, you cannot send any message right now"); }
         ctx.ws.send(JSON.stringify(content));
-    }
+    };
 
     var networkSendTo = function networkSendTo(ctx, peerId, content) {
         var seq = ctx.seq++;
@@ -340,7 +340,10 @@ define([
         var connectWs = function () {
             var ws = ctx.ws = makeWebsocket(websocketURL);
             ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
-            ws.on('message', function (msg) { return onMessage(ctx, {data:msg}); });
+            ws.on('message', function (msg, ack) {
+                ack();
+                return onMessage(ctx, {data:msg});
+            });
             ws.on('disconnect', function (reason) {
                 if (reason === 'io server disconnect') {
                     // the disconnection was initiated by the server, you need to reconnect manually
