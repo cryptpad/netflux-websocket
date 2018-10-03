@@ -249,7 +249,7 @@ define([
             } else {
                 var chan = ctx.channels[msg[3]];
                 if (!chan) {
-                    console.log("message to non-existant chan " + JSON.stringify(msg));
+                    console.log("message to non-existent chan " + JSON.stringify(msg));
                     return;
                 }
                 handlers = chan._.onMessage;
@@ -266,7 +266,7 @@ define([
         if (msg[2] === 'LEAVE') {
             var _chan = ctx.channels[msg[3]];
             if (!_chan) {
-                console.log("leaving non-existant chan " + JSON.stringify(msg));
+                console.log("leaving non-existent chan " + JSON.stringify(msg));
                 return;
             }
             _chan._.onLeave.forEach(function (h) {
@@ -281,7 +281,7 @@ define([
         if (msg[2] === 'JOIN') {
             var _chan2 = ctx.channels[msg[3]];
             if (!_chan2) {
-                console.log("ERROR: join to non-existant chan " + JSON.stringify(msg));
+                console.log("ERROR: join to non-existent chan " + JSON.stringify(msg));
                 return;
             }
             // have we yet fully joined the chan?
