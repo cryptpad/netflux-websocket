@@ -102,6 +102,12 @@ define([
     };
 
     var mkChannel = function mkChannel(ctx, id) {
+        if (ctx.channels[id]) {
+            // If the channel exist, don't try to join it a second time
+            return new Promise(function (res, rej) {
+                res(ctx.channels[id]);
+            });
+        }
         var internal = {
             onMessage: [],
             onJoin: [],
@@ -205,6 +211,16 @@ define([
             } else if (msg[1] === 'ERROR') {
                 if (typeof req.reject === "function") {
                     req.reject({ type: msg[2], message: msg[3] });
+                } else if (req._ && typeof req._.reject === "function") {
+                    if (msg[2] === 'EJOINED' && !ctx.channels[msg[3]]) {
+                        // The server still sees us in the channel but we're not.
+                        // Add the channel to the list and wait for the JOIN messages.
+                        // The Promise will be resolve in the 'JOIN' section.
+                        req.id = msg[3];
+                        ctx.channels[req.id] = req;
+                        return;
+                    }
+                    req._.reject({ type: msg[2], message: msg[3] });
                 } else {
                     console.error(msg);
                 }
@@ -266,7 +282,9 @@ define([
         if (msg[2] === 'LEAVE') {
             var _chan = ctx.channels[msg[3]];
             if (!_chan) {
-                console.log("leaving non-existent chan " + JSON.stringify(msg));
+                if (msg[1] !== ctx.uid) {
+                    console.log("leaving non-existent chan " + JSON.stringify(msg));
+                }
                 return;
             }
             _chan._.onLeave.forEach(function (h) {
@@ -284,6 +302,7 @@ define([
                 console.log("ERROR: join to non-existent chan " + JSON.stringify(msg));
                 return;
             }
+            if (_chan2._.members.indexOf(msg[1]) !== -1) { return; }
             // have we yet fully joined the chan?
             var synced = _chan2._.members.indexOf(ctx.uid) !== -1;
             _chan2._.members.push(msg[1]);
