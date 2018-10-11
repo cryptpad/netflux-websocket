@@ -376,6 +376,9 @@ define([
                         }
                     });
                 }
+                // If the "onclose" comes from a "disconnect" call, the following timeout will be cleared
+                // in the disconnect function to make sure we won't reconnect.
+                // If the following line is turned async, we need another way to detect intentional close
                 setTimeoutX(ctx, connectWs, (ctx.uid) ? 0 : RECONNECT_LOOP_CYCLE);
             };
             ws.onopen = function () {
