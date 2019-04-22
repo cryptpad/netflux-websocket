@@ -1,8 +1,8 @@
 /*global: WebSocket */
-define([
-    '/bower_components/es6-promise/es6-promise.min.js',
-],function () {
+(function () {
     'use strict';
+var factory = function () {
+
 
     // How much lag before we send a ping
     var MAX_LAG_BEFORE_PING = 15000;
@@ -420,4 +420,15 @@ define([
     };
 
     return { connect: connect };
-});
+};
+
+    if (typeof(module) !== undefined && module.exports) {
+        module.exports = factory();
+    } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
+        define([
+            '/bower_components/es6-promise/es6-promise.min.js',
+        ], factory);
+    } else {
+        window.netflux_websocket = factory();
+    }
+}());
