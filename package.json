@@ -1,6 +1,6 @@
 {
   "name": "netflux-websocket",
-  "version": "1.0.0",
+  "version": "0.1.18",
   "description": "a websocket based implementation of the netflux api",
   "main": "netflux-client.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/xwiki-labs/netflux-websocket.git"
   },
-  "author": "",
+  "author": "xwiki-labs",
   "license": "AGPL-3.0+",
   "bugs": {
     "url": "https://github.com/xwiki-labs/netflux-websocket/issues"
