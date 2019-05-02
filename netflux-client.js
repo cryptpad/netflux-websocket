@@ -428,7 +428,7 @@ var factory = function () {
     return { connect: connect };
 };
 
-    if (typeof(module) !== undefined && module.exports) {
+    if (typeof(module) !== 'undefined' && module.exports) {
         module.exports = factory();
     } else if ((typeof(define) !== 'undefined' && define !== null) && (define.amd !== null)) {
         define([
