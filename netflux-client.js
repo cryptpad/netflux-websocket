@@ -349,13 +349,15 @@ var factory = function () {
         var promiseResolve = NOFUNC;
         var promiseReject = NOFUNC;
 
-        window.addEventListener("offline", function () {
-            if (['localhost', '127.0.0.1', ''].indexOf(window.location.hostname) !== -1) {
-                // We can still access localhost, even offline
-                return;
-            }
-            closeWebsocket(ctx);
-        });
+        if (typeof(window) !== 'undefined') {
+            window.addEventListener("offline", function () {
+                if (['localhost', '127.0.0.1', ''].indexOf(window.location.hostname) !== -1) {
+                    // We can still access localhost, even offline
+                    return;
+                }
+                closeWebsocket(ctx);
+            });
+        }
 
         var connectWs = function () {
             var ws = ctx.ws = makeWebsocket(websocketURL);
