@@ -287,6 +287,10 @@ var factory = function () {
                 }
                 return;
             }
+            var leaveIdx = _chan._.members.indexOf(msg[1]);
+            if (leaveIdx !== -1) {
+                _chan._.members.splice(leaveIdx, 1);
+            }
             _chan._.onLeave.forEach(function (h) {
                 try {
                     h(msg[1], msg[4]);
