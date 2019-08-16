@@ -41,11 +41,17 @@ var factory = function () {
         ctx.timeouts.push(setTimeout(func, time));
     };
 
-    var closeWebsocket = function (ctx) {
+    var closeWebsocket = function (ctx, offline) {
         if (!ctx.ws) { return; }
         ctx.ws.onmessage = NOFUNC;
         ctx.ws.onopen = NOFUNC;
         ctx.ws.close();
+        // If we manually close the websocket because of a connection loss, we can
+        // instantly call the handlers to notify the user as fast as possible
+        if (offline) {
+            ctx.ws.onclose({ reason: "offline" });
+            return;
+        }
         setTimeoutX(ctx, function () {
             // onclose nulls this
             if (!ctx.ws) { return; }
@@ -359,7 +365,7 @@ var factory = function () {
                     // We can still access localhost, even offline
                     return;
                 }
-                closeWebsocket(ctx);
+                closeWebsocket(ctx, true);
             });
         }
 
