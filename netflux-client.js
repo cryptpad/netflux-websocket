@@ -107,6 +107,16 @@ var factory = function () {
         };
     };
 
+    var removeEventHandler = function (ctx, name, handler, mappings) {
+        var handlers = mappings[name];
+        if (!handlers) {
+            throw new Error("no such event " + name);
+        }
+        var idx = handlers.indexOf(handler);
+        if (idx === -1) { return; }
+        handlers.splice(idx, 1);
+    };
+
     var mkChannel = function mkChannel(ctx, id) {
         if (ctx.channels[id]) {
             // If the channel exist, don't try to join it a second time
@@ -121,6 +131,7 @@ var factory = function () {
             members: [],
             jSeq: ctx.seq++
         };
+        var mappings = { message: internal.onMessage, join: internal.onJoin, leave: internal.onLeave };
         var chan = {
             _: internal,
             time: now(),
@@ -132,7 +143,8 @@ var factory = function () {
             leave: function leave(reason) {
                 return channelLeave(ctx, chan.id, reason);
             },
-            on: makeEventHandlers(ctx, { message: internal.onMessage, join: internal.onJoin, leave: internal.onLeave })
+            on: makeEventHandlers(ctx, mappings),
+            off: function (name, handler) { removeEventHandler(ctx, name, handler, mappings); }
         };
         ctx.requests[internal.jSeq] = chan;
         send(ctx, [internal.jSeq, 'JOIN', id]);
@@ -156,6 +168,7 @@ var factory = function () {
     };
 
     var mkNetwork = function mkNetwork(ctx) {
+        var mappings = { message: ctx.onMessage, disconnect: ctx.onDisconnect, reconnect: ctx.onReconnect };
         var network = {
             webChannels: ctx.channels,
             getLag: function _getLag() {
@@ -170,7 +183,8 @@ var factory = function () {
             disconnect: function () {
                 return disconnect(ctx);
             },
-            on: makeEventHandlers(ctx, { message: ctx.onMessage, disconnect: ctx.onDisconnect, reconnect: ctx.onReconnect })
+            on: makeEventHandlers(ctx, mappings),
+            off: function (name, handler) { removeEventHandler(ctx, name, handler, mappings); }
         };
         network.__defineGetter__("webChannels", function () {
             return Object.keys(ctx.channels).map(function (k) {
