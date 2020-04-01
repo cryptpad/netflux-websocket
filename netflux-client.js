@@ -60,38 +60,49 @@ var factory = function () {
     };
 
     var send = function (ctx, content) {
-        if (!ctx.ws) { throw new Error("Disconnected, you cannot send any message right now"); }
+        if (!ctx.ws) { return false; }
         ctx.ws.send(JSON.stringify(content));
+        return true;
     }
 
     var networkSendTo = function networkSendTo(ctx, peerId, content) {
         var seq = ctx.seq++;
-        send(ctx, [seq, 'MSG', peerId, content]);
+        var message = [seq, 'MSG', peerId, content];
+        var sent = send(ctx, message);
         return new Promise(function (res, rej) {
+            if (!sent) {
+                return void rej({type: 'DISCONNECTED', message: JSON.stringify(message)});
+            }
             ctx.requests[seq] = { reject: rej, resolve: res, time: now() };
         });
     };
 
     var channelBcast = function channelBcast(ctx, chanId, content) {
         var chan = ctx.channels[chanId];
-        if (!chan) {
-            throw new Error("no such channel " + chanId);
-        }
         var seq = ctx.seq++;
-        send(ctx, [seq, 'MSG', chanId, content]);
+        var message = [seq, 'MSG', chanId, content];
+        if (!chan) {
+            return new Promise(function (res, rej) {
+                rej({type: 'NO_SUCH_CHANNEL', message: JSON.stirngify(message)});
+            });
+        }
+        var sent = send(ctx, message);
         return new Promise(function (res, rej) {
+            if (!sent) {
+                return void rej({type: 'DISCONNECTED', message: JSON.stringify(message)});
+            }
             ctx.requests[seq] = { reject: rej, resolve: res, time: now() };
         });
     };
 
     var channelLeave = function channelLeave(ctx, chanId, reason) {
         var chan = ctx.channels[chanId];
-        if (!chan) {
-            throw new Error("no such channel " + chanId);
-        }
-        var seq = ctx.seq++;
+        if (!chan) { return void console.debug('no such channel', chanId); }
+
         delete ctx.channels[chanId];
         if (!ctx.ws || ctx.ws.readyState !== 1) { return; } // the websocket connection is not opened
+
+        var seq = ctx.seq++;
         send(ctx, [seq, 'LEAVE', chanId, reason]);
         var emptyFunction = function() {};
         ctx.requests[seq] = { reject: emptyFunction, resolve: emptyFunction, time: now() };
@@ -147,9 +158,13 @@ var factory = function () {
             off: function (name, handler) { removeEventHandler(ctx, name, handler, mappings); }
         };
         ctx.requests[internal.jSeq] = chan;
-        send(ctx, [internal.jSeq, 'JOIN', id]);
+        var message = [internal.jSeq, 'JOIN', id];
+        var sent = send(ctx, message);
 
         return new Promise(function (res, rej) {
+            if (!sent) {
+                return void rej({type: 'DISCONNECTED', message: JSON.stringify(message)});
+            }
             chan._.resolve = res;
             chan._.reject = rej;
         });
