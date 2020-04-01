@@ -83,7 +83,7 @@ var factory = function () {
         var message = [seq, 'MSG', chanId, content];
         if (!chan) {
             return new Promise(function (res, rej) {
-                rej({type: 'NO_SUCH_CHANNEL', message: JSON.stirngify(message)});
+                rej({type: 'NO_SUCH_CHANNEL', message: JSON.stringify(message)});
             });
         }
         var sent = send(ctx, message);
