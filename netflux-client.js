@@ -3,7 +3,6 @@
     'use strict';
 var factory = function () {
 
-
     // How much lag before we send a ping
     var MAX_LAG_BEFORE_PING = 15000;
 
@@ -209,6 +208,42 @@ var factory = function () {
         return network;
     };
 
+    // The WebSocket implementation automatically queues incoming messages while they are handled
+    // synchronously in our code. As long as  this queue is not empty, it will trigger the
+    // "onmessage" event synchronously just after the previous message has been processed.
+    // This means all our other operations are not executed until all the queued messages
+    // went through. This is a problem especially for the PING system because it may delay
+    // the "PING" sent to the server and then consider us offline when the timeOfLastPing is over
+    // the limit.
+    // The following code implements a custom queue. The WebSocket "onmessage" handler now only
+    // pushes imcoming messages to our custom queue. Each message is then handled one at a time
+    // asynchrnously using a setTimeout. With this code, the PING interval check can be executed
+    // between two messages.
+    var process = function (handlers) {
+        if (handlers.busy) { return; }
+        handlers.queue = handlers.queue || [];
+        var next = function (msg) {
+            if (!msg) {
+                handlers.busy = false;
+                return;
+            }
+            handlers.busy = true;
+            handlers.forEach(function (h) {
+                try {
+                    setTimeout(function () {
+                        h(msg[4], msg[1]);
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            });
+            setTimeout(function () {
+                next(handlers.queue.shift());
+            });
+        };
+        next(handlers.queue.shift());
+    };
+
     var onMessage = function onMessage(ctx, evt) {
         var msg = void 0;
         try {
@@ -305,13 +340,9 @@ var factory = function () {
                 }
                 handlers = chan._.onMessage;
             }
-            handlers.forEach(function (h) {
-                try {
-                    h(msg[4], msg[1]);
-                } catch (e) {
-                    console.error(e);
-                }
-            });
+            handlers.queue = handlers.queue || [];
+            handlers.queue.push(msg);
+            process(handlers);
         }
 
         if (msg[2] === 'LEAVE') {
