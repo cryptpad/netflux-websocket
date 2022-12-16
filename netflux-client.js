@@ -220,6 +220,7 @@ var factory = function () {
     // asynchrnously using a setTimeout. With this code, the PING interval check can be executed
     // between two messages.
     var process = function (handlers) {
+        if (!Array.isArray(handlers)) { return; }
         if (handlers.busy) { return; }
         handlers.queue = handlers.queue || [];
         var next = function (msg) {
@@ -229,13 +230,13 @@ var factory = function () {
             }
             handlers.busy = true;
             handlers.forEach(function (h) {
-                try {
-                    setTimeout(function () {
+                setTimeout(function () {
+                    try {
                         h(msg[4], msg[1]);
-                    });
-                } catch (e) {
-                    console.error(e);
-                }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                });
             });
             setTimeout(function () {
                 next(handlers.queue.shift());
