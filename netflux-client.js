@@ -62,7 +62,7 @@ var factory = function () {
         if (!ctx.ws) { return false; }
         ctx.ws.send(JSON.stringify(content));
         return true;
-    }
+    };
 
     var networkSendTo = function networkSendTo(ctx, peerId, content) {
         var seq = ctx.seq++;
@@ -130,7 +130,7 @@ var factory = function () {
     var mkChannel = function mkChannel(ctx, id) {
         if (ctx.channels[id]) {
             // If the channel exist, don't try to join it a second time
-            return new Promise(function (res, rej) {
+            return new Promise(function (res /*, rej */) {
                 res(ctx.channels[id]);
             });
         }
@@ -395,7 +395,7 @@ var factory = function () {
     };
 
     var connect = function connect(websocketURL, makeWebsocket) {
-        makeWebsocket = makeWebsocket || function (url) { return new window.WebSocket(url) };
+        makeWebsocket = makeWebsocket || function (url) { return new window.WebSocket(url); };
         var ctx = {
             ws: null,
             seq: 1,
@@ -482,7 +482,7 @@ var factory = function () {
                         }
                     });
                 }
-            }
+            };
         };
 
         return new Promise(function (resolve, reject) {
