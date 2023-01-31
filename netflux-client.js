@@ -90,7 +90,7 @@ var factory = function () {
             if (!sent) {
                 return void rej({type: 'DISCONNECTED', message: JSON.stringify(message)});
             }
-            ctx.requests[seq] = { reject: rej, resolve: res, time: now() };
+            ctx.requests[seq] = { reject: rej, resolve: res, time: now(), chan: chan };
         });
     };
 
@@ -223,21 +223,26 @@ var factory = function () {
         if (!Array.isArray(handlers)) { return; }
         if (handlers.busy) { return; }
         handlers.queue = handlers.queue || [];
-        var next = function (msg) {
-            if (!msg) {
+        var next = function (data) {
+            if (!data) {
                 handlers.busy = false;
                 return;
             }
             handlers.busy = true;
-            handlers.forEach(function (h) {
-                setTimeout(function () {
-                    try {
-                        h(msg[4], msg[1]);
-                    } catch (e) {
-                        console.error(e);
-                    }
+            if (typeof(data) === "function") { // handle ACK of a message we sent
+                setTimeout(data); // data is a "resolve" function
+            } else { // this is an remote message
+                var msg = data;
+                handlers.forEach(function (h) {
+                    setTimeout(function () {
+                        try {
+                            h(msg[4], msg[1]);
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    });
                 });
-            });
+            }
             setTimeout(function () {
                 next(handlers.queue.shift());
             });
@@ -265,6 +270,14 @@ var factory = function () {
                     ctx.lastObservedLag = now() - Number(req.ping);
                     ctx.timeOfLastPingReceived = now();
                     ctx.pingOutstanding--;
+                    return;
+                }
+                if (req.chan) {
+                    // Make sure we preserve the order with the async onMessage for channels
+                    var msgHandlers = req.chan._.onMessage;
+                    msgHandlers.queue = msgHandlers.queue || [];
+                    msgHandlers.queue.push(req.resolve);
+                    process(msgHandlers);
                     return;
                 }
                 req.resolve();
