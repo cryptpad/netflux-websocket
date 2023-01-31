@@ -90,7 +90,7 @@ var factory = function () {
             if (!sent) {
                 return void rej({type: 'DISCONNECTED', message: JSON.stringify(message)});
             }
-            ctx.requests[seq] = { reject: rej, resolve: res, time: now() };
+            ctx.requests[seq] = { reject: rej, resolve: res, time: now(), chan: chan };
         });
     };
 
@@ -275,6 +275,16 @@ var factory = function () {
                     ctx.lastObservedLag = now() - Number(req.ping);
                     ctx.timeOfLastPingReceived = now();
                     ctx.pingOutstanding--;
+                    return;
+                }
+                if (req.chan) {
+                    // Make sure we preserve the order with the async onMessage for channels
+                    var ackQ = req.chan._.queue;
+                    ackQ.push({
+                        msg: [],
+                        h: [req.resolve]
+                    });
+                    process(ctx);
                     return;
                 }
                 req.resolve();
