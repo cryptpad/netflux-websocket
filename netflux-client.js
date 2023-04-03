@@ -127,7 +127,7 @@ var factory = function () {
         handlers.splice(idx, 1);
     };
 
-    var mkChannel = function mkChannel(ctx, id) {
+    var mkChannel = function mkChannel(ctx, id, sign) {
         if (ctx.channels[id]) {
             // If the channel exist, don't try to join it a second time
             return new Promise(function (res /*, rej */) {
@@ -142,10 +142,17 @@ var factory = function () {
             jSeq: ctx.seq++
         };
         var mappings = { message: internal.onMessage, join: internal.onJoin, leave: internal.onLeave };
+
+        var signature
+        if (typeof(sign) === "function") {
+            signature = sign([id, ctx.uid]);
+        }
+
         var chan = {
             _: internal,
             time: now(),
             id: id,
+            currentKey: signature && signature.key,
             members: internal.members,
             bcast: function bcast(msg) {
                 return channelBcast(ctx, chan.id, msg);
@@ -158,6 +165,7 @@ var factory = function () {
         };
         ctx.requests[internal.jSeq] = chan;
         var message = [internal.jSeq, 'JOIN', id];
+        if (signature) { message.push(signature); }
         var sent = send(ctx, message);
 
         return new Promise(function (res, rej) {
@@ -191,8 +199,8 @@ var factory = function () {
             sendto: function sendto(peerId, content) {
                 return networkSendTo(ctx, peerId, content);
             },
-            join: function join(chanId) {
-                return mkChannel(ctx, chanId);
+            join: function join(chanId, signFunction) {
+                return mkChannel(ctx, chanId, signFunction);
             },
             disconnect: function () {
                 return disconnect(ctx);
