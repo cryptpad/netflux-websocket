@@ -324,6 +324,7 @@ var factory = function () {
 
         if (msg[2] === 'IDENT') {
             ctx.uid = msg[3];
+            ctx.network.myID = ctx.uid;
             ctx.ws._onident();
             ctx.pingInterval = setInterval(function () {
                 if (now() - ctx.timeOfLastPingReceived < MAX_LAG_BEFORE_PING) { return; }
@@ -462,6 +463,7 @@ var factory = function () {
                 ctx.ws = null;
                 if (ctx.uid) {
                     ctx.uid = null;
+                    ctx.network.myID = ctx.uid;
                     ctx.onDisconnect.forEach(function (h) {
                         try {
                             h(evt.reason);
