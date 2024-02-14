@@ -11,7 +11,7 @@
     "url": "git+https://github.com/xwiki-labs/netflux-websocket.git"
   },
   "author": "xwiki-labs",
-  "license": "AGPL-3.0+",
+  "license": "LGPL-2.1",
   "bugs": {
     "url": "https://github.com/xwiki-labs/netflux-websocket/issues"
   },
