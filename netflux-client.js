@@ -262,6 +262,7 @@ var factory = function () {
         } catch (e) {
             console.log(e.stack);return;
         }
+        ctx.timeOfLastMsgReceived = now();
         if (msg[0] !== 0) {
             var req = ctx.requests[msg[0]];
             if (!req) {
@@ -316,7 +317,7 @@ var factory = function () {
             ctx.ws._onident();
             ctx.pingInterval = setInterval(function () {
                 if (now() - ctx.timeOfLastPingReceived < MAX_LAG_BEFORE_PING) { return; }
-                if (now() - ctx.timeOfLastPingReceived > MAX_LAG_BEFORE_DISCONNECT) {
+                if (now() - ctx.timeOfLastMsgReceived > MAX_LAG_BEFORE_DISCONNECT) {
                     closeWebsocket(ctx);
                 }
                 if (ctx.pingOutstanding) { return; }
@@ -355,7 +356,7 @@ var factory = function () {
                     return;
                 }
                 handlers = chan._.onMessage;
-                q = chan._.queue;
+                if (chan._.queue) { q = chan._.queue; }
             }
             q.push({
                 msg: msg,
@@ -438,6 +439,7 @@ var factory = function () {
 
             timeOfLastPingSent: -1,
             timeOfLastPingReceived: -1,
+            timeOfLastMsgReceived: -1,
             lastObservedLag: 0,
             pingOutstanding: 0
         };
@@ -460,6 +462,7 @@ var factory = function () {
         var connectWs = function () {
             var ws = ctx.ws = makeWebsocket(websocketURL);
             ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
+            ctx.timeOfLastMsgReceived = now();
             ws.onmessage = function (msg) { return onMessage(ctx, msg); };
             ws.onclose = function (evt) {
                 ws.onclose = NOFUNC;
@@ -492,6 +495,7 @@ var factory = function () {
             ctx.ws._onident = function () {
                 // This is to use the time of IDENT minus the connect time to guess a ping reception
                 ctx.timeOfLastPingReceived = now();
+                ctx.timeOfLastMsgReceived = now();
                 ctx.lastObservedLag = now() - ctx.timeOfLastPingSent;
 
                 if (promiseResolve !== NOFUNC) {
