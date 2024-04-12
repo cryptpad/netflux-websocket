@@ -145,14 +145,18 @@ var factory = function () {
         handlers.splice(idx, 1);
     };
 
-    var mkChannel = function mkChannel(ctx, id) {
+    var mkChannel = function mkChannel(ctx, id, priority) {
         if (ctx.channels[id]) {
             // If the channel exist, don't try to join it a second time
             return new Promise(function (res /*, rej */) {
                 res(ctx.channels[id]);
             });
         }
+        var q = ctx.queues.p2;
+        if (priority === 1) { q = ctx.queues.p1; }
+        else if (priority === 3) { q = ctx.queues.p3; }
         var internal = {
+            queue: q,
             onMessage: [],
             onJoin: [],
             onLeave: [],
@@ -209,8 +213,8 @@ var factory = function () {
             sendto: function sendto(peerId, content) {
                 return networkSendTo(ctx, peerId, content);
             },
-            join: function join(chanId) {
-                return mkChannel(ctx, chanId);
+            join: function join(chanId, priority) {
+                return mkChannel(ctx, chanId, priority);
             },
             disconnect: function () {
                 return disconnect(ctx);
@@ -237,16 +241,20 @@ var factory = function () {
     // pushes imcoming messages to our custom queue. Each message is then handled one at a time
     // asynchrnously using a setTimeout. With this code, the PING interval check can be executed
     // between two messages.
-    var process = function (handlers) {
-        if (!Array.isArray(handlers)) { return; }
-        if (handlers.busy) { return; }
-        handlers.queue = handlers.queue || [];
-        var next = function (msg) {
-            if (!msg) {
-                handlers.busy = false;
+    var process = function (ctx) {
+        //if (!Array.isArray(handlers)) { return; }
+        if (ctx.queues.busy) { return; }
+        var next = function () {
+            var obj =   ctx.queues.p1.shift() ||
+                        ctx.queues.p2.shift() ||
+                        ctx.queues.p3.shift();
+            if (!obj) {
+                ctx.queues.busy = false;
                 return;
             }
-            handlers.busy = true;
+            ctx.queues.busy = true;
+            var handlers = obj.h;
+            var msg = obj.msg;
             handlers.forEach(function (h) {
                 setTimeout(function () {
                     try {
@@ -256,11 +264,13 @@ var factory = function () {
                     }
                 });
             });
+            //console.error(ctx.queues.p1.length, ctx.queues.p2.length, ctx.queues.p3.length);
             setTimeout(function () {
-                next(handlers.queue.shift());
+                next();
             });
         };
-        next(handlers.queue.shift());
+        //next(handlers.queue.shift());
+        next();
     };
 
     var onMessage = function onMessage(ctx, evt) {
@@ -270,6 +280,7 @@ var factory = function () {
         } catch (e) {
             console.log(e.stack);return;
         }
+        ctx.timeOfLastMsgReceived = now();
         if (msg[0] !== 0) {
             var req = ctx.requests[msg[0]];
             if (!req) {
@@ -324,7 +335,7 @@ var factory = function () {
             ctx.ws._onident();
             ctx.pingInterval = setInterval(function () {
                 if (now() - ctx.timeOfLastPingReceived < MAX_LAG_BEFORE_PING) { return; }
-                if (now() - ctx.timeOfLastPingReceived > MAX_LAG_BEFORE_DISCONNECT) {
+                if (now() - ctx.timeOfLastMsgReceived > MAX_LAG_BEFORE_DISCONNECT) {
                     closeWebsocket(ctx);
                 }
                 if (ctx.pingOutstanding) { return; }
@@ -349,8 +360,13 @@ var factory = function () {
 
         if (msg[2] === 'MSG') {
             var handlers = void 0;
+            var q = ctx.queues.p2;
             if (msg[3] === ctx.uid) {
                 handlers = ctx.onMessage;
+                if (typeof(msg[5]) === "number") {
+                    if (msg[5] === 1) { q = ctx.queues.p1; }
+                    if (msg[5] === 3) { q = ctx.queues.p3; }
+                }
             } else {
                 var chan = ctx.channels[msg[3]];
                 if (!chan) {
@@ -358,10 +374,16 @@ var factory = function () {
                     return;
                 }
                 handlers = chan._.onMessage;
+                if (chan._.queue) { q = chan._.queue; }
             }
-            handlers.queue = handlers.queue || [];
-            handlers.queue.push(msg);
-            process(handlers);
+            q.push({
+                msg: msg,
+                h: handlers
+            });
+            //console.warn(ctx.queues.p1.length, ctx.queues.p2.length, ctx.queues.p3.length);
+            /*handlers.queue = handlers.queue || [];
+            handlers.queue.push(msg);*/
+            process(ctx);
         }
 
         if (msg[2] === 'LEAVE') {
@@ -427,8 +449,15 @@ var factory = function () {
             requests: {},
             pingInterval: null,
 
+            queues: {
+                p1: [],
+                p2: [],
+                p3: []
+            },
+
             timeOfLastPingSent: -1,
             timeOfLastPingReceived: -1,
+            timeOfLastMsgReceived: -1,
             lastObservedLag: 0,
             pingOutstanding: 0
         };
@@ -451,6 +480,7 @@ var factory = function () {
         var connectWs = function () {
             var ws = ctx.ws = makeWebsocket(websocketURL);
             ctx.timeOfLastPingSent = ctx.timeOfLastPingReceived = now();
+            ctx.timeOfLastMsgReceived = now();
             ws.onmessage = function (msg) { return onMessage(ctx, msg); };
             ws.onclose = function (evt) {
                 ws.onclose = NOFUNC;
@@ -483,6 +513,7 @@ var factory = function () {
             ctx.ws._onident = function () {
                 // This is to use the time of IDENT minus the connect time to guess a ping reception
                 ctx.timeOfLastPingReceived = now();
+                ctx.timeOfLastMsgReceived = now();
                 ctx.lastObservedLag = now() - ctx.timeOfLastPingSent;
 
                 if (promiseResolve !== NOFUNC) {
