@@ -8,12 +8,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xwiki-labs/netflux-websocket.git"
+    "url": "git+https://github.com/cryptpad/netflux-websocket.git"
   },
   "author": "xwiki-labs",
   "license": "LGPL-2.1",
   "bugs": {
-    "url": "https://github.com/xwiki-labs/netflux-websocket/issues"
+    "url": "https://github.com/cryptpad/netflux-websocket/issues"
   },
-  "homepage": "https://github.com/xwiki-labs/netflux-websocket#readme"
+  "homepage": "https://github.com/cryptpad/netflux-websocket#readme"
 }
