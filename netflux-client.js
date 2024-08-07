@@ -25,7 +25,7 @@ var factory = function () {
     var MAX_LAG_BEFORE_PING = 15000;
 
     // How much of a lag we accept before we will drop the socket
-    var MAX_LAG_BEFORE_DISCONNECT = 30000;
+    var MAX_LAG_BEFORE_DISCONNECT = 60000;
 
     // How often to ping the server
     var PING_CYCLE = 5000;
