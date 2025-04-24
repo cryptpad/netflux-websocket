@@ -435,7 +435,7 @@ var factory = function () {
     };
 
     var connect = function connect(websocketURL, makeWebsocket) {
-        makeWebsocket = makeWebsocket || function (url) { return new window.WebSocket(url); };
+        makeWebsocket = makeWebsocket || function (url) { return new globalThis.WebSocket(url); };
         var ctx = {
             ws: null,
             seq: 1,
