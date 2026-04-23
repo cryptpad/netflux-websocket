@@ -41,6 +41,9 @@ var factory = function () {
     // this is how often we will retry to connect.
     var RECONNECT_LOOP_CYCLE = 7000;
 
+    // Maximum number of messages sent to the server per second
+    const SEND_RATE_LIMIT = 100;
+
 
     var NOFUNC = function () {};
 
@@ -76,9 +79,66 @@ var factory = function () {
         }, FORCE_CLOSE_TIMEOUT);
     };
 
+    const sendQueue = []; // messages waiting to be sent
+    const sentLimit = []; // exact time of SEND_RATE_LIMIT sent during last second
+    let queueTo;
+
+    const sendMsg = (ctx, content) => {
+        if (!ctx.ws) { return; }
+        sentLimit.push(now());
+        ctx.ws.send(JSON.stringify(content));
+    };
+
+    // Clean sentLimit array by removing timestamps older than 1s ago
+    const cleanLimit = () => {
+        const n = now();
+        while(typeof(sentLimit[0]) === "number" && (n - sentLimit[0]) > 1000) {
+            sentLimit.shift();
+        }
+        return 1000 - (n - sentLimit[0]) + 1;
+    };
+
+    // Empty the queue when sentLimit array has been cleaned
+    const emptyQueue = (ctx) => {
+        cleanLimit();
+        // Send as many messages as possible without going over SEND_RATE_LIMIT
+        while (sentLimit.length < SEND_RATE_LIMIT && sendQueue.length) {
+            const msg = sendQueue.shift();
+            sendMsg(ctx, msg);
+        }
+
+        // And create a timeout for the remaining messages in the queue
+        if (sendQueue.length) { // implies sendLimit >= SEND_RATE_LIMIT
+            const next = 1000 - (now - sentLimit[0]) + 1;
+            clearTimeout(queueTo);
+            queueTo = setTimeout(() => {
+                emptyQueue(ctx);
+            }, next);
+        }
+    };
+
     var send = function (ctx, content) {
         if (!ctx.ws) { return false; }
-        ctx.ws.send(JSON.stringify(content));
+
+        // If we already have a queue, push to the end of the queue
+        if (sendQueue.length) {
+            sendQueue.push(content);
+            return true;
+        }
+
+        // Otherwise, check if we have to create a queue
+        const timeBeforeAllowed = cleanLimit();
+        if (sentLimit.length >= SEND_RATE_LIMIT) {
+            sendQueue.push(content);
+            clearTimeout(queueTo);
+            queueTo = setTimeout(() => {
+                emptyQueue(ctx);
+            }, timeBeforeAllowed);
+            return true;
+        }
+
+        // No rate limiting: send the message
+        sendMsg(ctx, content);
         return true;
     };
 
